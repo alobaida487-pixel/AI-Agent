@@ -1,27 +1,47 @@
-# Workspace
+# Discord Ticket Bot (بوت التذاكر)
 
-## Overview
+## نظرة عامة
+بوت ديسكورد عربي لإدارة تذاكر الدعم الفني، مشابه لـ Tickets v2.
 
-pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
+## المميزات
+- لوحة فتح تذاكر بزر واحد
+- استلام التذكرة من فريق الدعم (زر "استلام")
+- إغلاق التذكرة مع تأكيد (زر "إغلاق")
+- حفظ سجل كامل (Transcript) HTML بتنسيق RTL في قناة السجلات
+- إضافة/إزالة أعضاء من التذكرة (`/add`, `/remove`)
+- جميع النصوص بالعربية
 
-## Stack
+## أوامر السلاش
+- `/setup category log_channel support_role` — إعداد البوت (للأدمن فقط)
+- `/panel [message]` — نشر لوحة فتح التذاكر في القناة الحالية
+- `/add user` — إضافة عضو إلى التذكرة
+- `/remove user` — إزالة عضو من التذكرة
 
-- **Monorepo tool**: pnpm workspaces
-- **Node.js version**: 24
-- **Package manager**: pnpm
-- **TypeScript version**: 5.9
-- **API framework**: Express 5
-- **Database**: PostgreSQL + Drizzle ORM
-- **Validation**: Zod (`zod/v4`), `drizzle-zod`
-- **API codegen**: Orval (from OpenAPI spec)
-- **Build**: esbuild (CJS bundle)
+## بنية المشروع
+- `bot/` — حزمة بوت الديسكورد (discord.js v14, tsx, pg)
+  - `src/index.ts` — نقطة الدخول، الأوامر والأزرار
+  - `src/db.ts` — اتصال PostgreSQL وعمليات الجدول
+  - `src/transcript.ts` — توليد سجل HTML بالعربية
+- `artifacts/` — أعمال سابقة (متروكة): `ai-agent`, `api-server`, `mockup-sandbox`
 
-## Key Commands
+## قاعدة البيانات
+يستخدم PostgreSQL المدمج (`DATABASE_URL`). الجداول تُنشأ تلقائياً عند البدء:
+- `guild_settings` — إعدادات كل سيرفر (تصنيف، قناة سجلات، رتبة دعم، عداد التذاكر)
+- `tickets` — سجلات التذاكر (مفتوحة/مغلقة، صاحب التذكرة، المُستلم، الأرقام)
 
-- `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- `pnpm --filter @workspace/api-server run dev` — run API server locally
+## المتغيرات البيئية
+- `DISCORD_TOKEN` — توكن البوت (مطلوب)
+- `DATABASE_URL` — رابط PostgreSQL (مطلوب، متوفر تلقائياً)
+- `DISCORD_MESSAGE_CONTENT_INTENT=true` — تفعيل قراءة محتوى الرسائل (للسجلات الكاملة)
 
-See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.
+## ملاحظة مهمة عن الـ Privileged Intents
+لجعل سجلات التذاكر تحوي نص الرسائل، يجب:
+1. الذهاب إلى https://discord.com/developers/applications
+2. اختيار البوت → Bot → تفعيل **Message Content Intent**
+3. ضبط متغير البيئة `DISCORD_MESSAGE_CONTENT_INTENT=true` وإعادة تشغيل البوت
+
+بدون ذلك، السجلات ستحوي بيانات الرسائل (الكاتب، الوقت، المرفقات) بدون نص الرسالة.
+
+## التشغيل
+البوت يعمل عبر workflow اسمه "Discord Bot" بأمر:
+`pnpm --filter @workspace/bot run start`
