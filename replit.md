@@ -44,4 +44,6 @@
 
 ## التشغيل
 البوت يعمل عبر workflow اسمه "Discord Bot" بأمر:
-`pnpm --filter @workspace/bot run start`
+`npm --prefix bot start`
+
+تثبيت الاعتماديات: `cd bot && npm install`
