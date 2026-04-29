@@ -267,9 +267,22 @@ client.on(Events.InteractionCreate, async (interaction: Interaction) => {
         interaction.user.id,
       );
       if (existing) {
-        await interaction.editReply(
-          `❌ لديك تذكرة مفتوحة بالفعل: <#${existing.channel_id}>`,
-        );
+        const cooldownEndsMs =
+          existing.created_at.getTime() + 24 * 60 * 60 * 1000;
+        const cooldownEndsSec = Math.floor(cooldownEndsMs / 1000);
+        await interaction.editReply({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(0xed4245)
+              .setTitle("⏳ لديك تذكرة مفتوحة")
+              .setDescription(
+                `لديك تذكرة مفتوحة بالفعل: <#${existing.channel_id}>\n\n` +
+                  `لا يمكنك فتح تذكرة جديدة حتى:\n` +
+                  `• تنتهي مدة الانتظار <t:${cooldownEndsSec}:R> (<t:${cooldownEndsSec}:f>)\n` +
+                  `• أو يتم إغلاق تذكرتك الحالية`,
+              ),
+          ],
+        });
         return;
       }
 
