@@ -10,13 +10,18 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: conversations
+    description: Conversation thread management
+  - name: messages
+    description: Chat messages
+  - name: openai
+    description: OpenAI-backed chat completions
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +29,185 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /conversations:
+    get:
+      operationId: listConversations
+      tags: [conversations]
+      summary: List conversations
+      responses:
+        "200":
+          description: Conversation list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Conversation"
+    post:
+      operationId: createConversation
+      tags: [conversations]
+      summary: Create a new conversation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateConversationBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Conversation"
+
+  /conversations/{id}:
+    get:
+      operationId: getConversation
+      tags: [conversations]
+      summary: Get a conversation with its messages
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Conversation with messages
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConversationWithMessages"
+        "404":
+          description: Not found
+    patch:
+      operationId: updateConversation
+      tags: [conversations]
+      summary: Rename a conversation
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateConversationBody"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Conversation"
+    delete:
+      operationId: deleteConversation
+      tags: [conversations]
+      summary: Delete a conversation
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /conversations/{id}/messages:
+    get:
+      operationId: listMessages
+      tags: [messages]
+      summary: List messages for a conversation
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Messages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Message"
+
+  /openai/conversations/{id}/messages:
+    post:
+      operationId: sendOpenaiMessage
+      tags: [openai]
+      summary: Send a chat message and stream the assistant reply (SSE)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendOpenaiMessageBody"
+      responses:
+        "200":
+          description: Server-Sent Events stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+
+  /agent/summary:
+    get:
+      operationId: getAgentSummary
+      tags: [conversations]
+      summary: Aggregate stats for the dashboard
+      responses:
+        "200":
+          description: Summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentSummary"
+
+  /agent/recent-activity:
+    get:
+      operationId: getRecentActivity
+      tags: [conversations]
+      summary: Recent messages across all conversations
+      responses:
+        "200":
+          description: Recent message activity
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RecentActivityItem"
+
+  /agent/suggested-prompts:
+    get:
+      operationId: getSuggestedPrompts
+      tags: [conversations]
+      summary: Suggested starter prompts
+      responses:
+        "200":
+          description: Suggested prompts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SuggestedPrompt"
+
 components:
   schemas:
     HealthStatus:
@@ -31,6 +215,137 @@ components:
       properties:
         status:
           type: string
-      required:
-        - status
+      required: [status]
 
+    Conversation:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, title, createdAt]
+
+    Message:
+      type: object
+      properties:
+        id:
+          type: integer
+        conversationId:
+          type: integer
+        role:
+          type: string
+          enum: [user, assistant, system]
+        content:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, conversationId, role, content, createdAt]
+
+    ConversationWithMessages:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/Message"
+      required: [id, title, createdAt, messages]
+
+    CreateConversationBody:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+      required: [title]
+
+    UpdateConversationBody:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+      required: [title]
+
+    SendOpenaiMessageBody:
+      type: object
+      properties:
+        content:
+          type: string
+          minLength: 1
+          maxLength: 10000
+        model:
+          type: string
+          description: Optional model override
+      required: [content]
+
+    AgentSummary:
+      type: object
+      properties:
+        conversationCount:
+          type: integer
+        messageCount:
+          type: integer
+        userMessageCount:
+          type: integer
+        assistantMessageCount:
+          type: integer
+        lastActivityAt:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+        - conversationCount
+        - messageCount
+        - userMessageCount
+        - assistantMessageCount
+
+    RecentActivityItem:
+      type: object
+      properties:
+        conversationId:
+          type: integer
+        conversationTitle:
+          type: string
+        messageId:
+          type: integer
+        role:
+          type: string
+        preview:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - conversationId
+        - conversationTitle
+        - messageId
+        - role
+        - preview
+        - createdAt
+
+    SuggestedPrompt:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        prompt:
+          type: string
+        category:
+          type: string
+      required: [id, title, prompt, category]

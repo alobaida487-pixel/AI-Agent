@@ -6,4 +6,14 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from "./agentSummary";
+export * from "./conversation";
+export * from "./conversationWithMessages";
+export * from "./createConversationBody";
 export * from "./healthStatus";
+export * from "./message";
+export * from "./messageRole";
+export * from "./recentActivityItem";
+export * from "./sendOpenaiMessageBody";
+export * from "./suggestedPrompt";
+export * from "./updateConversationBody";

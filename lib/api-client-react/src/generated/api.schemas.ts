@@ -8,3 +8,82 @@
 export interface HealthStatus {
   status: string;
 }
+
+export interface Conversation {
+  id: number;
+  title: string;
+  createdAt: string;
+}
+
+export type MessageRole = (typeof MessageRole)[keyof typeof MessageRole];
+
+export const MessageRole = {
+  user: "user",
+  assistant: "assistant",
+  system: "system",
+} as const;
+
+export interface Message {
+  id: number;
+  conversationId: number;
+  role: MessageRole;
+  content: string;
+  createdAt: string;
+}
+
+export interface ConversationWithMessages {
+  id: number;
+  title: string;
+  createdAt: string;
+  messages: Message[];
+}
+
+export interface CreateConversationBody {
+  /**
+   * @minLength 1
+   * @maxLength 200
+   */
+  title: string;
+}
+
+export interface UpdateConversationBody {
+  /**
+   * @minLength 1
+   * @maxLength 200
+   */
+  title: string;
+}
+
+export interface SendOpenaiMessageBody {
+  /**
+   * @minLength 1
+   * @maxLength 10000
+   */
+  content: string;
+  /** Optional model override */
+  model?: string;
+}
+
+export interface AgentSummary {
+  conversationCount: number;
+  messageCount: number;
+  userMessageCount: number;
+  assistantMessageCount: number;
+  lastActivityAt?: string | null;
+}
+
+export interface RecentActivityItem {
+  conversationId: number;
+  conversationTitle: string;
+  messageId: number;
+  role: string;
+  preview: string;
+  createdAt: string;
+}
+
+export interface SuggestedPrompt {
+  id: string;
+  title: string;
+  prompt: string;
+  category: string;
+}

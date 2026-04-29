@@ -8,9 +8,146 @@
 import * as zod from "zod";
 
 /**
- * Returns server health status
  * @summary Health check
  */
 export const HealthCheckResponse = zod.object({
   status: zod.string(),
 });
+
+/**
+ * @summary List conversations
+ */
+export const ListConversationsResponseItem = zod.object({
+  id: zod.number(),
+  title: zod.string(),
+  createdAt: zod.coerce.date(),
+});
+export const ListConversationsResponse = zod.array(
+  ListConversationsResponseItem,
+);
+
+/**
+ * @summary Create a new conversation
+ */
+export const createConversationBodyTitleMax = 200;
+
+export const CreateConversationBody = zod.object({
+  title: zod.string().min(1).max(createConversationBodyTitleMax),
+});
+
+/**
+ * @summary Get a conversation with its messages
+ */
+export const GetConversationParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetConversationResponse = zod.object({
+  id: zod.number(),
+  title: zod.string(),
+  createdAt: zod.coerce.date(),
+  messages: zod.array(
+    zod.object({
+      id: zod.number(),
+      conversationId: zod.number(),
+      role: zod.enum(["user", "assistant", "system"]),
+      content: zod.string(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+});
+
+/**
+ * @summary Rename a conversation
+ */
+export const UpdateConversationParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const updateConversationBodyTitleMax = 200;
+
+export const UpdateConversationBody = zod.object({
+  title: zod.string().min(1).max(updateConversationBodyTitleMax),
+});
+
+export const UpdateConversationResponse = zod.object({
+  id: zod.number(),
+  title: zod.string(),
+  createdAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Delete a conversation
+ */
+export const DeleteConversationParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+/**
+ * @summary List messages for a conversation
+ */
+export const ListMessagesParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const ListMessagesResponseItem = zod.object({
+  id: zod.number(),
+  conversationId: zod.number(),
+  role: zod.enum(["user", "assistant", "system"]),
+  content: zod.string(),
+  createdAt: zod.coerce.date(),
+});
+export const ListMessagesResponse = zod.array(ListMessagesResponseItem);
+
+/**
+ * @summary Send a chat message and stream the assistant reply (SSE)
+ */
+export const SendOpenaiMessageParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const sendOpenaiMessageBodyContentMax = 10000;
+
+export const SendOpenaiMessageBody = zod.object({
+  content: zod.string().min(1).max(sendOpenaiMessageBodyContentMax),
+  model: zod.string().optional().describe("Optional model override"),
+});
+
+/**
+ * @summary Aggregate stats for the dashboard
+ */
+export const GetAgentSummaryResponse = zod.object({
+  conversationCount: zod.number(),
+  messageCount: zod.number(),
+  userMessageCount: zod.number(),
+  assistantMessageCount: zod.number(),
+  lastActivityAt: zod.coerce.date().nullish(),
+});
+
+/**
+ * @summary Recent messages across all conversations
+ */
+export const GetRecentActivityResponseItem = zod.object({
+  conversationId: zod.number(),
+  conversationTitle: zod.string(),
+  messageId: zod.number(),
+  role: zod.string(),
+  preview: zod.string(),
+  createdAt: zod.coerce.date(),
+});
+export const GetRecentActivityResponse = zod.array(
+  GetRecentActivityResponseItem,
+);
+
+/**
+ * @summary Suggested starter prompts
+ */
+export const GetSuggestedPromptsResponseItem = zod.object({
+  id: zod.string(),
+  title: zod.string(),
+  prompt: zod.string(),
+  category: zod.string(),
+});
+export const GetSuggestedPromptsResponse = zod.array(
+  GetSuggestedPromptsResponseItem,
+);
