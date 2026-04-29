@@ -1,21 +1,20 @@
 {
-  "name": "@workspace/bot",
+  "name": "discord-ticket-bot",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "start": "tsx src/index.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "start": "tsx src/index.ts"
   },
   "dependencies": {
     "discord.js": "^14.16.3",
     "pg": "^8.13.1"
   },
   "devDependencies": {
-    "@types/node": "catalog:",
+    "@types/node": "^25.3.5",
     "@types/pg": "^8.11.10",
-    "tsx": "catalog:",
+    "tsx": "^4.21.0",
     "typescript": "~5.9.2"
   }
 }

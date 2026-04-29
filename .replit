@@ -24,12 +24,12 @@ args = "Discord Bot"
 name = "Discord Bot"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "pnpm --filter @workspace/bot run start"
-
 [workflows.workflow.metadata]
 outputType = "console"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npm --prefix bot start"
 
 [agent]
 stack = "PNPM_WORKSPACE"

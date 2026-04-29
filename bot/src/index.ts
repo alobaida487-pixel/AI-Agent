@@ -31,10 +31,11 @@ import {
 } from "./db.js";
 import { buildTranscript } from "./transcript.js";
 
-const TOKEN = process.env.DISCORD_TOKEN;
+const TOKEN = process.env.DISCORD_TOKEN?.trim();
 if (!TOKEN) {
   throw new Error("DISCORD_TOKEN env var is required");
 }
+console.log(`🔑 Token loaded (length: ${TOKEN.length})`);
 
 const wantMessageContent =
   process.env.DISCORD_MESSAGE_CONTENT_INTENT === "true";
