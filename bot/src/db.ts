@@ -6,7 +6,15 @@ if (!process.env.DATABASE_URL) {
   throw new Error("DATABASE_URL is required");
 }
 
-export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const needsSsl =
+  /neon\.tech|supabase|render\.com|amazonaws|sslmode=require/.test(
+    process.env.DATABASE_URL,
+  );
+
+export const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ...(needsSsl ? { ssl: { rejectUnauthorized: false } } : {}),
+});
 
 export async function initSchema() {
   await pool.query(`
