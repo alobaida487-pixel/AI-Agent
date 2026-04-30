@@ -13,7 +13,9 @@ import {
   ButtonBuilder,
   ButtonStyle,
   EmbedBuilder,
+  StringSelectMenuBuilder,
   type Interaction,
+  type Message,
   type TextChannel,
   type CategoryChannel,
   type GuildMember,
@@ -29,6 +31,7 @@ import {
   getOpenTicketByOwner,
   claimTicket,
   closeTicketRow,
+  nextApplyNumber,
 } from "./db.js";
 import { buildTranscript } from "./transcript.js";
 
@@ -45,9 +48,10 @@ const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.DirectMessages,
     ...(wantMessageContent ? [GatewayIntentBits.MessageContent] : []),
   ],
-  partials: [Partials.Channel],
+  partials: [Partials.Channel, Partials.Message],
 });
 
 const commands = [
@@ -97,7 +101,45 @@ const commands = [
     .addUserOption((o) =>
       o.setName("user").setDescription("العضو المراد إزالته").setRequired(true),
     ),
+  new SlashCommandBuilder()
+    .setName("apply-setup")
+    .setDescription("إعداد نظام التقديم على الإدارة ونشر لوحة التقديم")
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .addChannelOption((o) =>
+      o
+        .setName("submissions")
+        .setDescription("القناة التي ستُرسل إليها نماذج التقديم")
+        .addChannelTypes(ChannelType.GuildText)
+        .setRequired(true),
+    ),
 ].map((c) => c.toJSON());
+
+const APPLY_QUESTIONS = [
+  "ما هو اسمك؟",
+  "كم عمرك؟",
+  "ما هي خبراتك السابقة؟",
+  "بماذا ستفيدنا في الإدارة؟",
+  "هل أنت مستعد للمقابلة؟",
+];
+
+type ApplySession = {
+  guildId: string;
+  step: number;
+  answers: string[];
+  startedAt: number;
+};
+
+const applySessions = new Map<string, ApplySession>();
+const APPLY_TIMEOUT_MS = 15 * 60 * 1000;
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [userId, session] of applySessions) {
+    if (now - session.startedAt > APPLY_TIMEOUT_MS) {
+      applySessions.delete(userId);
+    }
+  }
+}, 60 * 1000);
 
 client.once(Events.ClientReady, async (c) => {
   console.log(`✅ تم تسجيل الدخول كـ ${c.user.tag}`);
@@ -106,6 +148,29 @@ client.once(Events.ClientReady, async (c) => {
   await rest.put(Routes.applicationCommands(c.user.id), { body: commands });
   console.log("✅ تم تسجيل أوامر السلاش");
 });
+
+function applyPanelEmbed() {
+  return new EmbedBuilder()
+    .setColor(0x5865f2)
+    .setTitle("📋 نظام التقديم على الإدارة")
+    .setDescription(
+      "اختر من القائمة بالأسفل القسم الذي ترغب بالتقديم عليه.\nسيتم إرسال أسئلة المقابلة في الرسائل الخاصة.",
+    );
+}
+
+function applyPanelRow() {
+  return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId("apply:menu")
+      .setPlaceholder("اختر القسم للتقديم...")
+      .addOptions({
+        label: "تقديم الإدارة الخاصة بـ ريسبكت تاون",
+        description: "ابدأ مقابلة التقديم على الإدارة",
+        value: "respect_town_admin",
+        emoji: "📝",
+      }),
+  );
+}
 
 function panelEmbed(message: string) {
   return new EmbedBuilder()
@@ -220,6 +285,33 @@ client.on(Events.InteractionCreate, async (interaction: Interaction) => {
         return;
       }
 
+      if (commandName === "apply-setup") {
+        const submissions = interaction.options.getChannel(
+          "submissions",
+          true,
+        );
+        await updateSettings(interaction.guild.id, {
+          apply_log_channel_id: submissions.id,
+        });
+        const channel = interaction.channel as TextChannel;
+        await channel.send({
+          embeds: [applyPanelEmbed()],
+          components: [applyPanelRow()],
+        });
+        await interaction.reply({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(0x57f287)
+              .setTitle("✅ تم إعداد نظام التقديم")
+              .setDescription(
+                `سيتم إرسال نماذج التقديم إلى <#${submissions.id}>\nتم نشر لوحة التقديم في هذه القناة.`,
+              ),
+          ],
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+
       if (commandName === "add" || commandName === "remove") {
         const ticket = await getTicketByChannel(interaction.channelId);
         if (!ticket || ticket.status !== "open") {
@@ -245,6 +337,67 @@ client.on(Events.InteractionCreate, async (interaction: Interaction) => {
         }
         return;
       }
+    }
+
+    if (interaction.isStringSelectMenu()) {
+      if (interaction.customId === "apply:menu") {
+        if (!interaction.guild) return;
+        const choice = interaction.values[0];
+        if (choice !== "respect_town_admin") return;
+
+        const settings = await getSettings(interaction.guild.id);
+        if (!settings.apply_log_channel_id) {
+          await interaction.reply({
+            content: "❌ نظام التقديم غير مُعد. اطلب من إداري تشغيل `/apply-setup`.",
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+
+        const existing = applySessions.get(interaction.user.id);
+        if (existing) {
+          await interaction.reply({
+            content:
+              "⚠️ لديك تقديم نشط بالفعل. أكمل الإجابة على الأسئلة في الخاص أو اكتب `إلغاء`.",
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+
+        try {
+          const dm = await interaction.user.createDM();
+          await dm.send({
+            embeds: [
+              new EmbedBuilder()
+                .setColor(0x5865f2)
+                .setTitle("📝 تم بدء الاختبار")
+                .setDescription(
+                  `أهلاً بك! سيتم طرح ${APPLY_QUESTIONS.length} أسئلة، أجب عن كل سؤال برسالة.\nاكتب \`إلغاء\` في أي وقت لإنهاء التقديم.`,
+                ),
+            ],
+          });
+          applySessions.set(interaction.user.id, {
+            guildId: interaction.guild.id,
+            step: 0,
+            answers: [],
+            startedAt: Date.now(),
+          });
+          await dm.send(`**السؤال 1 من ${APPLY_QUESTIONS.length}:**\n${APPLY_QUESTIONS[0]}`);
+
+          await interaction.reply({
+            content: "✅ تم بدء الاختبار في الخاص حقك.",
+            flags: MessageFlags.Ephemeral,
+          });
+        } catch {
+          await interaction.reply({
+            content:
+              "❌ لا يمكنني إرسال رسالة خاصة لك. فعّل استقبال الرسائل من أعضاء السيرفر ثم أعد المحاولة.",
+            flags: MessageFlags.Ephemeral,
+          });
+        }
+        return;
+      }
+      return;
     }
 
     if (!interaction.isButton()) return;
@@ -545,6 +698,85 @@ client.on(Events.InteractionCreate, async (interaction: Interaction) => {
         })
         .catch(() => {});
     }
+  }
+});
+
+client.on(Events.MessageCreate, async (message: Message) => {
+  try {
+    if (message.author.bot) return;
+    if (message.guild) return;
+
+    const session = applySessions.get(message.author.id);
+    if (!session) return;
+
+    const content = message.content.trim();
+    if (!content) return;
+
+    if (content.toLowerCase() === "إلغاء" || content.toLowerCase() === "cancel") {
+      applySessions.delete(message.author.id);
+      await message.reply("❌ تم إلغاء التقديم.");
+      return;
+    }
+
+    session.answers.push(content);
+    session.step += 1;
+
+    if (session.step < APPLY_QUESTIONS.length) {
+      await message.reply(
+        `**السؤال ${session.step + 1} من ${APPLY_QUESTIONS.length}:**\n${APPLY_QUESTIONS[session.step]}`,
+      );
+      return;
+    }
+
+    applySessions.delete(message.author.id);
+
+    const guild = client.guilds.cache.get(session.guildId);
+    if (!guild) {
+      await message.reply("❌ تعذر إيجاد السيرفر. حاول مرة أخرى.");
+      return;
+    }
+    const settings = await getSettings(session.guildId);
+    if (!settings.apply_log_channel_id) {
+      await message.reply("❌ قناة استقبال التقديمات غير مُعدة.");
+      return;
+    }
+    const logChannel = (await guild.channels
+      .fetch(settings.apply_log_channel_id)
+      .catch(() => null)) as TextChannel | null;
+    if (!logChannel) {
+      await message.reply("❌ تعذر الوصول لقناة التقديمات.");
+      return;
+    }
+
+    const number = await nextApplyNumber(session.guildId);
+    const embed = new EmbedBuilder()
+      .setColor(0x5865f2)
+      .setTitle(`📋 تقديم جديد #${number}`)
+      .setAuthor({
+        name: message.author.tag,
+        iconURL: message.author.displayAvatarURL(),
+      })
+      .addFields(
+        { name: "👤 المتقدم", value: `<@${message.author.id}>`, inline: false },
+        ...APPLY_QUESTIONS.map((q, i) => ({
+          name: `${i + 1}. ${q}`,
+          value: session.answers[i].slice(0, 1024) || "—",
+        })),
+      )
+      .setFooter({ text: `User ID: ${message.author.id}` })
+      .setTimestamp();
+
+    await logChannel.send({ embeds: [embed] });
+    await message.reply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0x57f287)
+          .setTitle("✅ تم إرسال تقديمك")
+          .setDescription("شكراً لك! تم استلام تقديمك وسيتم مراجعته من قبل الإدارة قريباً."),
+      ],
+    });
+  } catch (err) {
+    console.error("DM message handler error:", err);
   }
 });
 

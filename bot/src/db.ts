@@ -11,6 +11,8 @@ export type GuildSettings = {
   support_role_id: string | null;
   panel_message: string;
   ticket_counter: number;
+  apply_log_channel_id: string | null;
+  apply_counter: number;
 };
 
 export type Ticket = {
@@ -86,11 +88,23 @@ export async function getSettings(guildId: string): Promise<GuildSettings> {
       support_role_id: null,
       panel_message: "اضغط الزر بالأسفل لفتح تذكرة دعم.",
       ticket_counter: 0,
+      apply_log_channel_id: null,
+      apply_counter: 0,
     };
     state.guildSettings[guildId] = s;
     scheduleSave();
+  } else {
+    if (s.apply_log_channel_id === undefined) s.apply_log_channel_id = null;
+    if (s.apply_counter === undefined) s.apply_counter = 0;
   }
   return s;
+}
+
+export async function nextApplyNumber(guildId: string): Promise<number> {
+  const s = await getSettings(guildId);
+  s.apply_counter += 1;
+  scheduleSave();
+  return s.apply_counter;
 }
 
 export async function updateSettings(
