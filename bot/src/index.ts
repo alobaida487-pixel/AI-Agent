@@ -1,3 +1,4 @@
+import { createServer } from "node:http";
 import {
   Client,
   GatewayIntentBits,
@@ -545,6 +546,14 @@ client.on(Events.InteractionCreate, async (interaction: Interaction) => {
         .catch(() => {});
     }
   }
+});
+
+const PORT = Number(process.env.PORT) || 3000;
+createServer((_req, res) => {
+  res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
+  res.end("Discord Ticket Bot is running ✅");
+}).listen(PORT, () => {
+  console.log(`🌐 خادم HTTP يعمل على المنفذ ${PORT}`);
 });
 
 client.login(TOKEN);
