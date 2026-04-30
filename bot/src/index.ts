@@ -403,6 +403,66 @@ client.on(Events.InteractionCreate, async (interaction: Interaction) => {
     if (!interaction.isButton()) return;
     if (!interaction.guild) return;
 
+    if (
+      interaction.customId.startsWith("apply:accept:") ||
+      interaction.customId.startsWith("apply:reject:")
+    ) {
+      const member = interaction.member as GuildMember;
+      const isAllowed =
+        member.permissions.has(PermissionFlagsBits.ManageGuild) ||
+        member.permissions.has(PermissionFlagsBits.Administrator);
+      if (!isAllowed) {
+        await interaction.reply({
+          content: "❌ هذا الزر مخصص للإدارة فقط.",
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+      const parts = interaction.customId.split(":");
+      const action = parts[1];
+      const applicantId = parts[2];
+      const accepted = action === "accept";
+
+      const applicant = await client.users.fetch(applicantId).catch(() => null);
+      let dmStatus = "";
+      if (applicant) {
+        try {
+          const dm = await applicant.createDM();
+          await dm.send({
+            embeds: [
+              new EmbedBuilder()
+                .setColor(accepted ? 0x57f287 : 0xed4245)
+                .setTitle(accepted ? "✅ تم قبولك" : "❌ تم رفضك")
+                .setDescription(
+                  accepted
+                    ? "تم قبولك في **ريسبكت تاون**! ستتواصل معك الإدارة قريباً."
+                    : "نأسف، تم رفض تقديمك في **ريسبكت تاون**. حظاً أوفر في المرة القادمة.",
+                ),
+            ],
+          });
+          dmStatus = "تم إرسال الرسالة للعضو في الخاص.";
+        } catch {
+          dmStatus = "⚠️ تعذر إرسال رسالة خاصة للعضو (قد يكون مغلق الخاص).";
+        }
+      } else {
+        dmStatus = "⚠️ تعذر العثور على العضو.";
+      }
+
+      const original = interaction.message.embeds[0];
+      const updatedEmbed = EmbedBuilder.from(original)
+        .setColor(accepted ? 0x57f287 : 0xed4245)
+        .addFields({
+          name: accepted ? "✅ مقبول" : "❌ مرفوض",
+          value: `بواسطة <@${interaction.user.id}>\n${dmStatus}`,
+        });
+
+      await interaction.update({
+        embeds: [updatedEmbed],
+        components: [],
+      });
+      return;
+    }
+
     if (interaction.customId === "ticket:create") {
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const settings = await getSettings(interaction.guild.id);
@@ -766,7 +826,20 @@ client.on(Events.MessageCreate, async (message: Message) => {
       .setFooter({ text: `User ID: ${message.author.id}` })
       .setTimestamp();
 
-    await logChannel.send({ embeds: [embed] });
+    const decisionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`apply:accept:${message.author.id}`)
+        .setLabel("قبول")
+        .setEmoji("✅")
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId(`apply:reject:${message.author.id}`)
+        .setLabel("رفض")
+        .setEmoji("❌")
+        .setStyle(ButtonStyle.Danger),
+    );
+
+    await logChannel.send({ embeds: [embed], components: [decisionRow] });
     await message.reply({
       embeds: [
         new EmbedBuilder()
