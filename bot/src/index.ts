@@ -33,6 +33,7 @@ import {
   closeTicketRow,
   nextApplyNumber,
 } from "./db.js";
+import { joinVoiceChannel, VoiceConnectionStatus } from "@discordjs/voice";
 import { buildTranscript } from "./transcript.js";
 
 const TOKEN = process.env.DISCORD_TOKEN?.trim();
@@ -48,6 +49,7 @@ const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.GuildVoiceStates,
     GatewayIntentBits.DirectMessages,
     ...(wantMessageContent ? [GatewayIntentBits.MessageContent] : []),
   ],
@@ -100,6 +102,17 @@ const commands = [
     .setDescription("إزالة عضو من التذكرة الحالية")
     .addUserOption((o) =>
       o.setName("user").setDescription("العضو المراد إزالته").setRequired(true),
+    ),
+  new SlashCommandBuilder()
+    .setName("join")
+    .setDescription("يأمر البوت بالدخول إلى قناة صوتية")
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .addChannelOption((o) =>
+      o
+        .setName("channel")
+        .setDescription("القناة الصوتية التي سيدخلها البوت")
+        .addChannelTypes(ChannelType.GuildVoice)
+        .setRequired(true),
     ),
   new SlashCommandBuilder()
     .setName("apply-setup")
@@ -282,6 +295,41 @@ client.on(Events.InteractionCreate, async (interaction: Interaction) => {
           content: "✅ تم نشر اللوحة.",
           flags: MessageFlags.Ephemeral,
         });
+        return;
+      }
+
+      if (commandName === "join") {
+        const voiceChannel = interaction.options.getChannel("channel", true);
+        const member = interaction.member as GuildMember;
+        try {
+          const connection = joinVoiceChannel({
+            channelId: voiceChannel.id,
+            guildId: interaction.guild.id,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            adapterCreator: interaction.guild.voiceAdapterCreator as any,
+            selfDeaf: false,
+            selfMute: true,
+          });
+          connection.on(VoiceConnectionStatus.Disconnected, () => {
+            connection.destroy();
+          });
+          await interaction.reply({
+            embeds: [
+              new EmbedBuilder()
+                .setColor(0x57f287)
+                .setTitle("🔊 تم الدخول للقناة الصوتية")
+                .setDescription(
+                  `دخل البوت إلى <#${voiceChannel.id}> بأمر من <@${member.id}>`,
+                ),
+            ],
+          });
+        } catch (err) {
+          console.error("Voice join error:", err);
+          await interaction.reply({
+            content: "❌ تعذر الدخول للقناة الصوتية. تأكد أن البوت يملك صلاحيات الدخول.",
+            flags: MessageFlags.Ephemeral,
+          });
+        }
         return;
       }
 
