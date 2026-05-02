@@ -673,8 +673,21 @@ client.on(Events.InteractionCreate, async (interaction: Interaction) => {
       const applicantId = parts[2];
       const accepted = action === "accept";
 
+      const ACTIVATE_ROLE_ID = "1500099528450248755";
       const applicant = await client.users.fetch(applicantId).catch(() => null);
       let dmStatus = "";
+      let roleStatus = "";
+
+      if (accepted) {
+        try {
+          const member = await interaction.guild.members.fetch(applicantId);
+          await member.roles.add(ACTIVATE_ROLE_ID);
+          roleStatus = "✅ تم إعطاؤه الرتبة.";
+        } catch {
+          roleStatus = "⚠️ تعذر إعطاء الرتبة (تأكد أن البوت فوق الرتبة في الترتيب).";
+        }
+      }
+
       if (applicant) {
         try {
           const dm = await applicant.createDM();
@@ -690,7 +703,7 @@ client.on(Events.InteractionCreate, async (interaction: Interaction) => {
                 ),
             ],
           });
-          dmStatus = "تم إرسال الرسالة للعضو في الخاص.";
+          dmStatus = "✅ تم إرسال الرسالة للعضو في الخاص.";
         } catch {
           dmStatus = "⚠️ تعذر إرسال رسالة للعضو (الخاص مغلق).";
         }
@@ -703,7 +716,7 @@ client.on(Events.InteractionCreate, async (interaction: Interaction) => {
         .setColor(accepted ? 0x57f287 : 0xed4245)
         .addFields({
           name: accepted ? "✅ مقبول" : "❌ مرفوض",
-          value: `بواسطة <@${interaction.user.id}>\n${dmStatus}`,
+          value: `بواسطة <@${interaction.user.id}>\n${dmStatus}${accepted ? `\n${roleStatus}` : ""}`,
         });
 
       await interaction.update({ embeds: [updatedEmbed], components: [] });
