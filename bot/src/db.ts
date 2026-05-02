@@ -13,6 +13,8 @@ export type GuildSettings = {
   ticket_counter: number;
   apply_log_channel_id: string | null;
   apply_counter: number;
+  activate_log_channel_id: string | null;
+  activate_counter: number;
 };
 
 export type Ticket = {
@@ -90,12 +92,16 @@ export async function getSettings(guildId: string): Promise<GuildSettings> {
       ticket_counter: 0,
       apply_log_channel_id: null,
       apply_counter: 0,
+      activate_log_channel_id: null,
+      activate_counter: 0,
     };
     state.guildSettings[guildId] = s;
     scheduleSave();
   } else {
     if (s.apply_log_channel_id === undefined) s.apply_log_channel_id = null;
     if (s.apply_counter === undefined) s.apply_counter = 0;
+    if (s.activate_log_channel_id === undefined) s.activate_log_channel_id = null;
+    if (s.activate_counter === undefined) s.activate_counter = 0;
   }
   return s;
 }
@@ -105,6 +111,13 @@ export async function nextApplyNumber(guildId: string): Promise<number> {
   s.apply_counter += 1;
   scheduleSave();
   return s.apply_counter;
+}
+
+export async function nextActivateNumber(guildId: string): Promise<number> {
+  const s = await getSettings(guildId);
+  s.activate_counter += 1;
+  scheduleSave();
+  return s.activate_counter;
 }
 
 export async function updateSettings(

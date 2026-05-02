@@ -14,6 +14,9 @@ import {
   ButtonStyle,
   EmbedBuilder,
   StringSelectMenuBuilder,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
   type Interaction,
   type Message,
   type TextChannel,
@@ -32,6 +35,7 @@ import {
   claimTicket,
   closeTicketRow,
   nextApplyNumber,
+  nextActivateNumber,
 } from "./db.js";
 import { joinVoiceChannel, VoiceConnectionStatus } from "@discordjs/voice";
 import { buildTranscript } from "./transcript.js";
@@ -104,6 +108,17 @@ const commands = [
       o.setName("user").setDescription("العضو المراد إزالته").setRequired(true),
     ),
   new SlashCommandBuilder()
+    .setName("activate-setup")
+    .setDescription("إعداد نظام تفعيل الشخصية ونشر لوحة التفعيل")
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .addChannelOption((o) =>
+      o
+        .setName("submissions")
+        .setDescription("القناة التي ستُرسل إليها طلبات التفعيل")
+        .addChannelTypes(ChannelType.GuildText)
+        .setRequired(true),
+    ),
+  new SlashCommandBuilder()
     .setName("join")
     .setDescription("يأمر البوت بالدخول إلى قناة صوتية")
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
@@ -161,6 +176,75 @@ client.once(Events.ClientReady, async (c) => {
   await rest.put(Routes.applicationCommands(c.user.id), { body: commands });
   console.log("✅ تم تسجيل أوامر السلاش");
 });
+
+function activatePanelEmbed() {
+  return new EmbedBuilder()
+    .setColor(0x5865f2)
+    .setTitle("💎 نظام تفعيل الشخصية | ريسبكت تاون")
+    .setDescription(
+      "مرحباً بك في نظام التفعيل الخاص بـ **ريسبكت تاون**.\n" +
+      "اضغط الزر بالأسفل لتقديم طلب التفعيل بشكل رسمي ومنظم.\n\n" +
+      "📋 **التعليمات**\n" +
+      "اقرأ قوانين السيرفر جيداً، واكتب بياناتك بشكل صحيح وواضح.\n\n" +
+      "⚠️ **التنبيهات**\n" +
+      "أي معلومات خاطئة أو تعهد غير صحيح قد يؤدي إلى رفض الطلب.\n\n" +
+      "🛡️ **المطلوب**\n" +
+      "الاسم واسم العائلة • العمر (20+ في الرول بلاي) • يوزر روبلوكس • التعهد بعدم التخريب",
+    );
+}
+
+function activatePanelRow() {
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId("activate:open")
+      .setLabel("✅ تفعيل | Activite")
+      .setStyle(ButtonStyle.Success),
+  );
+}
+
+function activateModal() {
+  return new ModalBuilder()
+    .setCustomId("activate:submit")
+    .setTitle("طلب تفعيل شخصية — ريسبكت تاون")
+    .addComponents(
+      new ActionRowBuilder<TextInputBuilder>().addComponents(
+        new TextInputBuilder()
+          .setCustomId("full_name")
+          .setLabel("اسمك واسم العائلة")
+          .setPlaceholder("اكتب اسمك الكامل")
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true)
+          .setMaxLength(50),
+      ),
+      new ActionRowBuilder<TextInputBuilder>().addComponents(
+        new TextInputBuilder()
+          .setCustomId("rp_age")
+          .setLabel("عمرك في الرول بلاي (لازم يكون 20+)")
+          .setPlaceholder("اكتب عمرك")
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true)
+          .setMaxLength(3),
+      ),
+      new ActionRowBuilder<TextInputBuilder>().addComponents(
+        new TextInputBuilder()
+          .setCustomId("roblox_user")
+          .setLabel("يوزر روبلوكس")
+          .setPlaceholder("اكتب يوزرك في روبلوكس")
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true)
+          .setMaxLength(20),
+      ),
+      new ActionRowBuilder<TextInputBuilder>().addComponents(
+        new TextInputBuilder()
+          .setCustomId("pledge")
+          .setLabel("التعهد بعدم التخريب")
+          .setPlaceholder('اكتب: "أتعهد بعدم التخريب والالتزام بالقوانين"')
+          .setStyle(TextInputStyle.Paragraph)
+          .setRequired(true)
+          .setMaxLength(200),
+      ),
+    );
+}
 
 function applyPanelEmbed() {
   return new EmbedBuilder()
@@ -333,6 +417,30 @@ client.on(Events.InteractionCreate, async (interaction: Interaction) => {
         return;
       }
 
+      if (commandName === "activate-setup") {
+        const submissions = interaction.options.getChannel("submissions", true);
+        await updateSettings(interaction.guild.id, {
+          activate_log_channel_id: submissions.id,
+        });
+        const channel = interaction.channel as TextChannel;
+        await channel.send({
+          embeds: [activatePanelEmbed()],
+          components: [activatePanelRow()],
+        });
+        await interaction.reply({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(0x57f287)
+              .setTitle("✅ تم إعداد نظام التفعيل")
+              .setDescription(
+                `سيتم إرسال طلبات التفعيل إلى <#${submissions.id}>\nتم نشر لوحة التفعيل في هذه القناة.`,
+              ),
+          ],
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+
       if (commandName === "apply-setup") {
         const submissions = interaction.options.getChannel(
           "submissions",
@@ -385,6 +493,95 @@ client.on(Events.InteractionCreate, async (interaction: Interaction) => {
         }
         return;
       }
+    }
+
+    if (interaction.isModalSubmit()) {
+      if (interaction.customId === "activate:submit") {
+        if (!interaction.guild) return;
+        const fullName = interaction.fields.getTextInputValue("full_name").trim();
+        const rpAgeRaw = interaction.fields.getTextInputValue("rp_age").trim();
+        const robloxUser = interaction.fields.getTextInputValue("roblox_user").trim();
+        const pledge = interaction.fields.getTextInputValue("pledge").trim();
+
+        const rpAge = parseInt(rpAgeRaw, 10);
+        if (isNaN(rpAge) || rpAge < 20) {
+          await interaction.reply({
+            embeds: [
+              new EmbedBuilder()
+                .setColor(0xed4245)
+                .setTitle("❌ العمر غير مقبول")
+                .setDescription(
+                  `عمرك في الرول بلاي يجب أن يكون **20 أو أكثر**.\nكتبت: \`${rpAgeRaw}\`\nأعد المحاولة.`,
+                ),
+            ],
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+
+        const settings = await getSettings(interaction.guild.id);
+        if (!settings.activate_log_channel_id) {
+          await interaction.reply({
+            content: "❌ نظام التفعيل غير مُعد. اطلب من إداري تشغيل `/activate-setup`.",
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+        const logChannel = (await interaction.guild.channels
+          .fetch(settings.activate_log_channel_id)
+          .catch(() => null)) as TextChannel | null;
+        if (!logChannel) {
+          await interaction.reply({
+            content: "❌ تعذر الوصول لقناة التفعيل.",
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+
+        const number = await nextActivateNumber(interaction.guild.id);
+        const embed = new EmbedBuilder()
+          .setColor(0x5865f2)
+          .setTitle(`💎 طلب تفعيل شخصية #${number}`)
+          .setAuthor({
+            name: interaction.user.tag,
+            iconURL: interaction.user.displayAvatarURL(),
+          })
+          .addFields(
+            { name: "👤 المتقدم", value: `<@${interaction.user.id}>`, inline: false },
+            { name: "📛 الاسم واسم العائلة", value: fullName, inline: true },
+            { name: "🎂 العمر في الرول بلاي", value: `${rpAge} سنة`, inline: true },
+            { name: "🎮 يوزر روبلوكس", value: robloxUser, inline: true },
+            { name: "🤝 التعهد", value: pledge, inline: false },
+          )
+          .setFooter({ text: `User ID: ${interaction.user.id}` })
+          .setTimestamp();
+
+        const decisionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`activate:accept:${interaction.user.id}`)
+            .setLabel("قبول ✅")
+            .setStyle(ButtonStyle.Success),
+          new ButtonBuilder()
+            .setCustomId(`activate:reject:${interaction.user.id}`)
+            .setLabel("رفض ❌")
+            .setStyle(ButtonStyle.Danger),
+        );
+
+        await logChannel.send({ embeds: [embed], components: [decisionRow] });
+        await interaction.reply({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(0x57f287)
+              .setTitle("✅ تم إرسال طلب التفعيل")
+              .setDescription(
+                "شكراً! تم استلام طلبك وسيتم مراجعته من قبل الإدارة قريباً.",
+              ),
+          ],
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+      return;
     }
 
     if (interaction.isStringSelectMenu()) {
@@ -450,6 +647,68 @@ client.on(Events.InteractionCreate, async (interaction: Interaction) => {
 
     if (!interaction.isButton()) return;
     if (!interaction.guild) return;
+
+    if (interaction.customId === "activate:open") {
+      await interaction.showModal(activateModal());
+      return;
+    }
+
+    if (
+      interaction.customId.startsWith("activate:accept:") ||
+      interaction.customId.startsWith("activate:reject:")
+    ) {
+      const member = interaction.member as GuildMember;
+      const isAllowed =
+        member.permissions.has(PermissionFlagsBits.ManageGuild) ||
+        member.permissions.has(PermissionFlagsBits.Administrator);
+      if (!isAllowed) {
+        await interaction.reply({
+          content: "❌ هذا الزر مخصص للإدارة فقط.",
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+      const parts = interaction.customId.split(":");
+      const action = parts[1];
+      const applicantId = parts[2];
+      const accepted = action === "accept";
+
+      const applicant = await client.users.fetch(applicantId).catch(() => null);
+      let dmStatus = "";
+      if (applicant) {
+        try {
+          const dm = await applicant.createDM();
+          await dm.send({
+            embeds: [
+              new EmbedBuilder()
+                .setColor(accepted ? 0x57f287 : 0xed4245)
+                .setTitle(accepted ? "✅ تم قبول شخصيتك" : "❌ تم رفض شخصيتك")
+                .setDescription(
+                  accepted
+                    ? "تهانينا! تم **قبول** طلب تفعيل شخصيتك في **ريسبكت تاون**.\nمرحباً بك بيننا!"
+                    : "نأسف، تم **رفض** طلب تفعيل شخصيتك في **ريسبكت تاون**.\nيمكنك إعادة التقديم مستقبلاً.",
+                ),
+            ],
+          });
+          dmStatus = "تم إرسال الرسالة للعضو في الخاص.";
+        } catch {
+          dmStatus = "⚠️ تعذر إرسال رسالة للعضو (الخاص مغلق).";
+        }
+      } else {
+        dmStatus = "⚠️ تعذر العثور على العضو.";
+      }
+
+      const original = interaction.message.embeds[0];
+      const updatedEmbed = EmbedBuilder.from(original)
+        .setColor(accepted ? 0x57f287 : 0xed4245)
+        .addFields({
+          name: accepted ? "✅ مقبول" : "❌ مرفوض",
+          value: `بواسطة <@${interaction.user.id}>\n${dmStatus}`,
+        });
+
+      await interaction.update({ embeds: [updatedEmbed], components: [] });
+      return;
+    }
 
     if (
       interaction.customId.startsWith("apply:accept:") ||
